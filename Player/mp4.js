@@ -1,13 +1,25 @@
 'use strict';
 
 var Bytestream = (function BytestreamClosure() {
-  function constructor(arrayBuffer, start, length) {
-    this.bytes = new Uint8Array(arrayBuffer);
+  function constructor(stream, start, lengthParam) { //arrayBuffer
+    this.stream = stream;
+    //this.bytes = null;
     this.start = start || 0;
     this.pos = this.start;
-    this.end = (start + length) || this.bytes.length;
+    //this.end = 0; // temp
+    this.lengthParam = lengthParam;
   }
   constructor.prototype = {
+    openStream: function(onOpened) {
+      console.log("Bytestream::openStream()");
+       this.stream.readAll(null, function (buffer) {
+          console.log("Bytestream::read all, filling buffer");
+          this.bytes = new Uint8Array(buffer);
+          this.end = (this.start + this.lengthParam) || this.bytes.length;
+          console.log("Bytestream::openStream(), done, length="+this.bytes.length + " " + this.stream.url);
+          if(onOpened) onOpened();
+      }.bind(this));
+    },
     get length() {
       return this.end - this.start;
     },
@@ -200,7 +212,19 @@ var MP4Reader = (function reader() {
   }
 
   constructor.prototype = {
+    openStream: function (onOpened) {
+      console.log("MP4Reader::OpenStream()");
+
+      this.stream.openStream(function() {
+        console.log("MP4Reader::OpenStream():opened and reading boxes");
+        this.file = {};
+        this.readBoxes(this.stream, this.file);
+        
+        if(onOpened) onOpened();
+      }.bind(this));
+    },
     readBoxes: function (stream, parent) {
+      console.log("MP4Reader::readBoxes()");
       while (stream.peek32()) {
         var child = this.readBox(stream);
         if (child.type in parent) {
@@ -449,12 +473,15 @@ var MP4Reader = (function reader() {
           break;
       };
       return box;
-    },
+    },/* TODO: REMOVE ALLTOGETHER
     read: function () {
       var start = (new Date).getTime();
       this.file = {};
       this.readBoxes(this.stream, this.file);
       console.info("Parsed stream in " + ((new Date).getTime() - start) + " ms");
+    },*/
+    onTrackMeta: function(num, onLoaded) {
+      //TODO
     },
     traceSamples: function () {
       var video = this.tracks[1];
@@ -729,12 +756,13 @@ var MP4Player = (function reader() {
     getBoundaryStrengthsA: "optimized"
   };
 
-  function constructor(stream, canvas, useWorkers, render) {
+  function constructor(stream, canvas, useWorkers, render, streaming) {
     this.canvas = canvas;
     this.webGLCanvas = null;
     this.stream = stream;
     this.useWorkers = useWorkers;
     this.render = render;
+    this.streaming = streaming == true;
 
     this.statistics = {
       videoStartTime: 0,
@@ -821,22 +849,35 @@ var MP4Player = (function reader() {
   }
 
   constructor.prototype = {
-    readAll: function(callback) {
-      console.info("MP4Player::readAll()");
+    open: function(callback) {
+      console.info("MP4Player::open()");
+      this.reader = new MP4Reader(new Bytestream(this.stream));
+      this.reader.openStream(function() {
+        var video = this.reader.tracks[1];
+        this.size = new Size(video.trak.tkhd.width, video.trak.tkhd.height);
+        console.info("MP4Player::open(), opened");//, length: " +  this.reader.stream.length);
+        if (callback) callback();
+      }.bind(this)); //TODO:? REMOVE ALLTOGETHER
+      //this.reader.onTrackMeta(1,  // TODO
+      
+      /* TODO: REMOVE ALLTOGETHER
       this.stream.readAll(null, function (buffer) {
+
         this.reader = new MP4Reader(new Bytestream(buffer));
         this.reader.read();
         var video = this.reader.tracks[1];
         this.size = new Size(video.trak.tkhd.width, video.trak.tkhd.height);
         console.info("MP4Player::readAll(), length: " +  this.reader.stream.length);
         if (callback) callback();
+
       }.bind(this));
+    */
     },
     play: function() {
       var reader = this.reader;
 
       if (!reader) {
-        this.readAll(this.play.bind(this));
+        this.open(this.play.bind(this));
         return;
       } else {
         this.canvas.width = this.size.w;
@@ -909,9 +950,10 @@ var Broadway = (function broadway() {
     div.appendChild(controls);
 
     var useWorkers = div.attributes.workers ? div.attributes.workers.value == "true" : false;
+    var streaming = div.attributes.stream ? div.attributes.stream.value == "true" : false;
     var render = div.attributes.render ? div.attributes.render.value == "true" : false;
 
-    this.player = new MP4Player(new Stream(src), this.canvas, useWorkers, render);
+    this.player = new MP4Player(new Stream(src), this.canvas, useWorkers, render, streaming);
 
     this.score = null;
     this.player.onStatisticsUpdated = function (statistics) {
