@@ -182,7 +182,7 @@ var ProgressiveBytestream = (function ProgressiveBytestream(){
   var arrayOfBytes = [];
   function constructor(firstArrayBuffer) { // , fileStream
     Bytestream.call(this, firstArrayBuffer);
-    arrayOfBytes.push(firstArrayBuffer);
+    arrayOfBytes.push(new Uint8Array(firstArrayBuffer));
     console.log("=======ProgressiveBytestream ctor called=========");
   }
   constructor.prototype = Object.create(Bytestream.prototype);
@@ -192,31 +192,38 @@ var ProgressiveBytestream = (function ProgressiveBytestream(){
        arrayOfBytes.push(new Uint8Array(buffer));
   };
   constructor.prototype.subarray = function (start, end) {
-    if(end < this.bytes.end) return this.bytes.subarray(start, end);
-      //find start
+    //if(end <= this.bytes.length) return this.bytes.subarray(start, end);
+    //find start
     var offset = 0;
-    var slice;
+    var slice = null;
     var a = arrayOfBytes;
     for(var i = 0; i < a.length; i++) {
       var cbytes = a[i];
-
-      if(!slice && (start-offset) < cbytes.length) { // must start within this block
-        if(end < cbytes.length) {
+      var from = start-offset;
+      var to = end-offset;
+      if(!slice && from < cbytes.length) { // must start within this block
+        if(to < cbytes.length) {
           slice = cbytes.subarray(start-offset, end-offset);
           break;
         } else {
-          slice.set(cbytes); // prefill starting bytes
+          console.log("creating slice");
+          slice = new Uint8Array(end-start);
+          slice.set(cbytes, 0); // prefill starting bytes
           // start has been found, but end is not in the section
         }
       } else if(slice) {  // keep finding start
-        if(offset >= end) break; // all done
-        slice.set(cbytes, offset);
+        if(cbytes.length > to) {
+          slice.set(cbytes.subarray(0,to), offset); //slice.length-offset
+          break;
+        }
+        else slice.set(cbytes, offset);
         // multipart
         //if(end - offse >= cbytes.length) 
         
       }
 
       offset += cbytes.length;
+      if(offset >= end) break;
     }
     return slice;
   }
