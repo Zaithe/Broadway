@@ -124,6 +124,14 @@ var Bytestream = (function BytestreamClosure() {
     readU32: function () {
       return this.peek32(true) >>> 0;
     },
+    readU32AtIndex: function(index) {
+      // Special common use-case
+      var oldPos = this.pos;
+      this.pos = index;
+      var res = this.peek32(false) >>> 0;
+      this.pos = oldPos;
+      return res;
+    }, 
     read4CC: function () {
       var pos = this.pos;
       if (pos > this.end - 4)
@@ -702,34 +710,20 @@ var Track = (function track () {
      * AVC samples contain one or more NAL units each of which have a length prefix.
      * This function returns an array of NAL units without their length prefixes.
      */
-    __getSampleNALUnits: function (sample) {
-      var bytes = this.file.stream.bytes;
-      var offset = this.sampleToOffset(sample);
-      var end = offset + this.sampleToSize(sample, 1);
-      var nalUnits = [];
-      while(end - offset > 0) {
-        var length = (new Bytestream(bytes.buffer, offset, end)).readU32();
-        nalUnits.push(bytes.subarray(offset + 4, offset + length + 4));
-        offset = offset + length + 4;
-      }
-      return nalUnits;
-    },
     getSampleNALUnits: function (sample, callback) {
-      var bytes = this.file.stream.bytes;
+      var stream = this.file.stream;
+      var bytes = stream.bytes;
       var offset = this.sampleToOffset(sample);
       var end = offset + this.sampleToSize(sample, 1);
-      //var nalUnits = [];
 
-      this.file.stream.bufferFor(end, function() {
+      stream.bufferFor(end, function() {
         while(end - offset > 0) {
-          var length = (new Bytestream(bytes.buffer, offset, end)).readU32();
-          //nalUnits.push(
+          //var length = (new Bytestream(bytes.buffer, offset, end)).readU32();
+          var length = stream.readU32AtIndex(offset); // improved GC usage
           var nal = bytes.subarray(offset + 4, offset + length + 4);
           callback(nal);
-            //);
           offset = offset + length + 4;
         }
-        //callback(nalUnits);
       });
     }
 
