@@ -1,25 +1,33 @@
 'use strict';
 
-var Bytestream = (function BytestreamClosure() {
-  function constructor(stream, start, lengthParam) { //arrayBuffer
-    this.stream = stream;
-    //this.bytes = null;
-    this.start = start || 0;
-    this.pos = this.start;
-    //this.end = 0; // temp
-    this.lengthParam = lengthParam;
+var Buffer = (function BufferClosure(){
+  function constructor(arrayBuffer, start, length) {
+    //this.buffers = [];
+    this.bytes = [];
   }
   constructor.prototype = {
-    openStream: function(onOpened) {
-      console.log("Bytestream::openStream()");
-       this.stream.readAll(null, function (buffer) {
-          console.log("Bytestream::read all, filling buffer");
-          this.bytes = new Uint8Array(buffer);
-          this.end = (this.start + this.lengthParam) || this.bytes.length;
-          console.log("Bytestream::openStream(), done, length="+this.bytes.length + " " + this.stream.url);
-          if(onOpened) onOpened();
-      }.bind(this));
+    addBytes: function(byteObject){ // :Uint8Array
+      this.bytes.push(byteObject);
     },
+    peek32: function (advance) {
+    },
+    getByte(x) {
+
+    }
+  }
+  return constructor;
+})();
+
+var Bytestream = (function BytestreamClosure() {
+  function constructor(arrayBuffer, start, length) {
+    this.bytes = new Uint8Array(arrayBuffer);
+    //console.log("bytes " + this.bytes.length);
+
+    this.start = start || 0;
+    this.pos = this.start;
+    this.end = (start + length) || this.bytes.length;
+  }
+  constructor.prototype = {
     get length() {
       return this.end - this.start;
     },
@@ -212,19 +220,7 @@ var MP4Reader = (function reader() {
   }
 
   constructor.prototype = {
-    openStream: function (onOpened) {
-      console.log("MP4Reader::OpenStream()");
-
-      this.stream.openStream(function() {
-        console.log("MP4Reader::OpenStream():opened and reading boxes");
-        this.file = {};
-        this.readBoxes(this.stream, this.file);
-        
-        if(onOpened) onOpened();
-      }.bind(this));
-    },
     readBoxes: function (stream, parent) {
-      console.log("MP4Reader::readBoxes()");
       while (stream.peek32()) {
         var child = this.readBox(stream);
         if (child.type in parent) {
@@ -256,6 +252,8 @@ var MP4Reader = (function reader() {
       }
 
       function skipRemainingBytes () {
+        // Never skips to end of file if meta is all on top. JD
+        //console.log("skipRemainingBytes " + stream.pos + " " + stream.end + " r:"+remainingBytes()); // if moov at start, this is just start of file JD
         stream.skip(remainingBytes());
       }
 
@@ -279,6 +277,7 @@ var MP4Reader = (function reader() {
           break;
         case 'moov':
           box.name = "Movie Box";
+          console.log("box "+box.name + " "+box.size);
           readRemainingBoxes();
           break;
         case 'mvhd':
@@ -431,6 +430,7 @@ var MP4Reader = (function reader() {
           box.name = "Decoding Time to Sample Box";
           readFullHeader();
           box.table = stream.readU32Array(stream.readU32(), 2, ["count", "delta"]);
+          //console.log("stts " + stream.pos + " " + stream.end); //JD
           break;
         case 'stss':
           box.name = "Sync Sample Box";
@@ -442,6 +442,7 @@ var MP4Reader = (function reader() {
           readFullHeader();
           box.table = stream.readU32Array(stream.readU32(), 3,
             ["firstChunk", "samplesPerChunk", "sampleDescriptionId"]);
+          //console.log("stsc "+box.table.length); //710 then 2 once JD
           break;
         case 'stsz':
           box.name = "Sample Size Box";
@@ -468,20 +469,20 @@ var MP4Reader = (function reader() {
           assert (box.size >= 8, "Cannot parse large media data yet.");
           box.data = stream.readU8Array(remainingBytes());
           break;
+        case 'dinf': //JD This is tiny, not video
+          //console.log("box dinf " + box.size); //JD
         default:
+          
           skipRemainingBytes();
           break;
       };
       return box;
-    },/* TODO: REMOVE ALLTOGETHER
+    },
     read: function () {
       var start = (new Date).getTime();
       this.file = {};
       this.readBoxes(this.stream, this.file);
       console.info("Parsed stream in " + ((new Date).getTime() - start) + " ms");
-    },*/
-    onTrackMeta: function(num, onLoaded) {
-      //TODO
     },
     traceSamples: function () {
       var video = this.tracks[1];
@@ -568,7 +569,7 @@ var Track = (function track () {
        */
 
       var table = this.trak.mdia.minf.stbl.stsc.table;
-
+      //console.log(table.length); //710 repeated JD
       if (table.length === 1) {
         var row = table[0];
         assert (row.firstChunk === 1);
@@ -616,7 +617,7 @@ var Track = (function track () {
     /**
      * Computes the sample at the specified time.
      */
-    timeToSample: function (time) {
+    __timeToSample: function (time) {
       /* In the time-to-sample table samples are grouped by their duration. The count field
        * indicates the number of consecutive samples that have the same duration. For example,
        * the following table:
@@ -651,7 +652,7 @@ var Track = (function track () {
     /**
      * Gets the total time of the track.
      */
-    getTotalTime: function () {
+    __getTotalTime: function () {
       if (PARANOID) {
         var table = this.trak.mdia.minf.stbl.stts.table;
         var duration = 0;
@@ -662,7 +663,7 @@ var Track = (function track () {
       }
       return this.trak.mdia.mdhd.duration;
     },
-    getTotalTimeInSeconds: function () {
+    __getTotalTimeInSeconds: function () {
       return this.timeToSeconds(this.getTotalTime());
     },
     getTimeScale: function () {
@@ -712,7 +713,22 @@ var Track = (function track () {
         offset = offset + length + 4;
       }
       return nalUnits;
+    },
+    ___getSampleNALUnits: function (sample, callback) {
+      var bytes = this.file.stream.bytes;
+      var offset = this.sampleToOffset(sample);
+      var end = offset + this.sampleToSize(sample, 1);
+      var nalUnits = [];
+      while(end - offset > 0) {
+        var length = (new Bytestream(bytes.buffer, offset)).readU32();
+        nalUnits.push(bytes.subarray(offset + 4, offset + length + 4));
+        offset = offset + length + 4;
+      }
+
+      callback(nalUnits);
+
     }
+
   };
   return constructor;
 })();
@@ -762,7 +778,7 @@ var MP4Player = (function reader() {
     this.stream = stream;
     this.useWorkers = useWorkers;
     this.render = render;
-    this.streaming = streaming == true;
+    this.streaming = streaming;
 
     this.statistics = {
       videoStartTime: 0,
@@ -849,35 +865,22 @@ var MP4Player = (function reader() {
   }
 
   constructor.prototype = {
-    open: function(callback) {
-      console.info("MP4Player::open()");
-      this.reader = new MP4Reader(new Bytestream(this.stream));
-      this.reader.openStream(function() {
-        var video = this.reader.tracks[1];
-        this.size = new Size(video.trak.tkhd.width, video.trak.tkhd.height);
-        console.info("MP4Player::open(), opened");//, length: " +  this.reader.stream.length);
-        if (callback) callback();
-      }.bind(this)); //TODO:? REMOVE ALLTOGETHER
-      //this.reader.onTrackMeta(1,  // TODO
-      
-      /* TODO: REMOVE ALLTOGETHER
+    readAll: function(callback) {
+      console.info("MP4Player::readAll()");
       this.stream.readAll(null, function (buffer) {
-
         this.reader = new MP4Reader(new Bytestream(buffer));
         this.reader.read();
         var video = this.reader.tracks[1];
         this.size = new Size(video.trak.tkhd.width, video.trak.tkhd.height);
         console.info("MP4Player::readAll(), length: " +  this.reader.stream.length);
         if (callback) callback();
-
       }.bind(this));
-    */
     },
     play: function() {
       var reader = this.reader;
 
       if (!reader) {
-        this.open(this.play.bind(this));
+        this.readAll(this.play.bind(this));
         return;
       } else {
         this.canvas.width = this.size.w;
@@ -912,15 +915,16 @@ var MP4Player = (function reader() {
             avcWorker.sendMessage("decode-sample", Uint8Array(nal));
           });
         } else {
+          //console.log("foo"); // many hits
           var avc = this.avc;
           video.getSampleNALUnits(pic).forEach(function (nal) {
             avc.decode(nal);
           });
         }
         pic ++;
-        if (pic < 3000) {
+        if (pic < 3000) { // TODO: why does this limit the stream?
           setTimeout(foo.bind(this), 1);
-        }
+        } 
       }.bind(this), 1);
     }
   };
@@ -950,8 +954,8 @@ var Broadway = (function broadway() {
     div.appendChild(controls);
 
     var useWorkers = div.attributes.workers ? div.attributes.workers.value == "true" : false;
-    var streaming = div.attributes.stream ? div.attributes.stream.value == "true" : false;
     var render = div.attributes.render ? div.attributes.render.value == "true" : false;
+    var streaming = div.attributes.stream ? div.attributes.stream.value == "true" : false;
 
     this.player = new MP4Player(new Stream(src), this.canvas, useWorkers, render, streaming);
 
