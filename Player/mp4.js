@@ -192,7 +192,7 @@ var ProgressiveBytestream = (function ProgressiveBytestream(){
        arrayOfBytes.push(new Uint8Array(buffer));
   };
   constructor.prototype.subarray = function (start, end) {
-    //if(end <= this.bytes.length) return this.bytes.subarray(start, end);
+    if(end <= this.bytes.length) return this.bytes.subarray(start, end);
     //find start
     var offset = 0;
     var slice = null;
@@ -201,19 +201,20 @@ var ProgressiveBytestream = (function ProgressiveBytestream(){
       var cbytes = a[i];
       var from = start-offset;
       var to = end-offset;
-      if(!slice && from < cbytes.length) { // must start within this block
-        if(to < cbytes.length) {
-          slice = cbytes.subarray(start-offset, end-offset);
+      if(!slice && from <= cbytes.length) { // must start within this block
+        if(to <= cbytes.length) {
+          slice = cbytes.subarray(from, to);
           break;
         } else {
-          console.log("creating slice");
+          
           slice = new Uint8Array(end-start);
-          slice.set(cbytes, 0); // prefill starting bytes
+          console.log("creating slice "+ slice.length + " " + cbytes.length + " " + from+":"+to);
+          slice.set(cbytes.subarray(from, cbytes.length), 0); // prefill starting bytes
           // start has been found, but end is not in the section
         }
       } else if(slice) {  // keep finding start
         if(cbytes.length > to) {
-          slice.set(cbytes.subarray(0,to), offset); //slice.length-offset
+          slice.set(cbytes.subarray(0,to), slice.length-to); //slice.length-offset
           break;
         }
         else slice.set(cbytes, offset);
@@ -300,6 +301,7 @@ var MP4Reader = (function reader() {
       }
 
       function skipRemainingBytes () {
+        if(box.size > 100000) return;
         // Never skips to end of file if meta is all on top. JD
         //console.log("skipRemainingBytes " + stream.pos + " " + stream.end + " r:"+remainingBytes()); // if moov at start, this is just start of file JD
         stream.skip(remainingBytes());

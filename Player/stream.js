@@ -55,7 +55,7 @@ var ProgressiveStream = (function stream() {
           var absLen = res.length;
           if(absLen === lastLength) return;
           if (absLen >= 8000) { //8 17360057 buffer meta box infomation
-            console.log("absLen " + absLen);
+            //console.log("absLen " + absLen);
             var relLength = absLen - lastLength;
             var buffer = new Uint8Array(relLength);
             for(var i=0; i < relLength; i++) {
@@ -70,7 +70,7 @@ var ProgressiveStream = (function stream() {
 
       xhr.onreadystatechange = function (event) {
         if (xhr.readyState === 4) {
-          console.log("xhr.response " + xhr.response.length);
+          //console.log("xhr.response " + xhr.response.length);
           //xhr.onprogress(event); // TODO remove?
           if(complete) complete(xhr.response);
           // var byteArray = new Uint8Array(xhr.response);
