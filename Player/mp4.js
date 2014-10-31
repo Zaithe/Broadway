@@ -1,6 +1,6 @@
 'use strict';
 
-var Buffer = (function BufferClosure(){
+var ProgressiveBytestream = (function BufferClosure(){
   function constructor(arrayBuffer, start, length) {
     //this.buffers = [];
     this.bytes = [];
@@ -28,6 +28,9 @@ var Bytestream = (function BytestreamClosure() {
     this.end = (start + length) || this.bytes.length;
   }
   constructor.prototype = {
+    bufferFor(size, callback) { // interface
+      callback(); 
+    },
     get length() {
       return this.end - this.start;
     },
@@ -469,10 +472,7 @@ var MP4Reader = (function reader() {
           assert (box.size >= 8, "Cannot parse large media data yet.");
           box.data = stream.readU8Array(remainingBytes());
           break;
-        case 'dinf': //JD This is tiny, not video
-          //console.log("box dinf " + box.size); //JD
         default:
-          
           skipRemainingBytes();
           break;
       };
@@ -482,7 +482,7 @@ var MP4Reader = (function reader() {
       var start = (new Date).getTime();
       this.file = {};
       this.readBoxes(this.stream, this.file);
-      console.info("Parsed stream in " + ((new Date).getTime() - start) + " ms");
+      console.info("Parsed stream boxes in " + ((new Date).getTime() - start) + " ms");
     },
     traceSamples: function () {
       var video = this.tracks[1];
@@ -702,31 +702,35 @@ var Track = (function track () {
      * AVC samples contain one or more NAL units each of which have a length prefix.
      * This function returns an array of NAL units without their length prefixes.
      */
-    getSampleNALUnits: function (sample) {
+    __getSampleNALUnits: function (sample) {
       var bytes = this.file.stream.bytes;
       var offset = this.sampleToOffset(sample);
       var end = offset + this.sampleToSize(sample, 1);
       var nalUnits = [];
       while(end - offset > 0) {
-        var length = (new Bytestream(bytes.buffer, offset)).readU32();
+        var length = (new Bytestream(bytes.buffer, offset, end)).readU32();
         nalUnits.push(bytes.subarray(offset + 4, offset + length + 4));
         offset = offset + length + 4;
       }
       return nalUnits;
     },
-    ___getSampleNALUnits: function (sample, callback) {
+    getSampleNALUnits: function (sample, callback) {
       var bytes = this.file.stream.bytes;
       var offset = this.sampleToOffset(sample);
       var end = offset + this.sampleToSize(sample, 1);
-      var nalUnits = [];
-      while(end - offset > 0) {
-        var length = (new Bytestream(bytes.buffer, offset)).readU32();
-        nalUnits.push(bytes.subarray(offset + 4, offset + length + 4));
-        offset = offset + length + 4;
-      }
+      //var nalUnits = [];
 
-      callback(nalUnits);
-
+      this.file.stream.bufferFor(end, function() {
+        while(end - offset > 0) {
+          var length = (new Bytestream(bytes.buffer, offset, end)).readU32();
+          //nalUnits.push(
+          var nal = bytes.subarray(offset + 4, offset + length + 4);
+          callback(nal);
+            //);
+          offset = offset + length + 4;
+        }
+        //callback(nalUnits);
+      });
     }
 
   };
@@ -909,20 +913,19 @@ var MP4Player = (function reader() {
       setTimeout(function foo() {
         if (this.useWorkers) {
           var avcWorker = this.avcWorker;
-          video.getSampleNALUnits(pic).forEach(function (nal) {
-            // Copy the sample so that we only do a structured clone of the
-            // region of interest
-            avcWorker.sendMessage("decode-sample", Uint8Array(nal));
-          });
+          video.getSampleNALUnits(pic, function (nal) {
+                // Copy the sample so that we only do a structured clone of the
+                // region of interest
+                avcWorker.sendMessage("decode-sample", Uint8Array(nal));
+              });
         } else {
-          //console.log("foo"); // many hits
           var avc = this.avc;
-          video.getSampleNALUnits(pic).forEach(function (nal) {
+          video.getSampleNALUnits(pic, function (nal) {
             avc.decode(nal);
           });
         }
         pic ++;
-        if (pic < 3000) { // TODO: why does this limit the stream?
+        if (pic < 3000) { 
           setTimeout(foo.bind(this), 1);
         } 
       }.bind(this), 1);
