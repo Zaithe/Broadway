@@ -182,8 +182,10 @@ var ProgressiveBytestream = (function ProgressiveBytestream(){
   function constructor(firstArrayBuffer) { // , fileStream
     Bytestream.call(this, firstArrayBuffer);
     this.arrayOfBytes = [firstArrayBuffer];
+    console.log("=======ProgressiveBytestream ctor called=========");
   }
   constructor.prototype = Object.create(Bytestream.prototype);
+  constructor.constructor = constructor;
   constructor.prototype.onBuffer = function(buffer) {
        this.arrayOfBytes.push(buffer);
   };
@@ -874,19 +876,17 @@ var MP4Player = (function reader() {
   constructor.prototype = {
     readAll: function(callback) {
       console.info("MP4Player::readAll()");
-      // ================= WORK IN PROGRESS===============================
-      if(this.streaming) {
-        this.reader = new MP4Reader(new ProgressiveBytestream(buffer)); //Bytestream
-        this.reader.read();
-        var video = this.reader.tracks[1];
-        this.size = new Size(video.trak.tkhd.width, video.trak.tkhd.height);
-        console.info("MP4Player::readAll(), length: " +  this.reader.stream.length);
-        if (callback) callback();
-        return;
-      } 
-
+      // ================= WORK IN PROGRESS JD===============================
       this.stream.readAll(null, function (buffer) { // needs to be abstracted out -JD
-        this.reader = new MP4Reader(new ProgressiveBytestream(buffer)); //Bytestream
+        var bytes;
+        if(this.streaming) {
+          bytes = new ProgressiveBytestream(buffer);
+          this.stream.changeBufferCallback(bytes.onBuffer);
+        } else {
+          bytes = new Bytestream(buffer);
+        }
+
+        this.reader = new MP4Reader(bytes);
         this.reader.read();
         var video = this.reader.tracks[1];
         this.size = new Size(video.trak.tkhd.width, video.trak.tkhd.height);
