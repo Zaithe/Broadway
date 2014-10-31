@@ -172,7 +172,7 @@ var Bytestream = (function BytestreamClosure() {
       return new Bytestream(this.bytes.buffer, start, length);
     },
     subarray: function (start, end) {
-      return bytes.subarray(offset + 4, offset + length + 4);
+      return this.bytes.subarray(start, end);
     }
   };
   return constructor;
@@ -189,20 +189,36 @@ var ProgressiveBytestream = (function ProgressiveBytestream(){
   constructor.constructor = constructor;
 
   constructor.prototype.onBuffer = function(buffer) {
-       arrayOfBytes.push(buffer);
+       arrayOfBytes.push(new Uint8Array(buffer));
   };
   constructor.prototype.subarray = function (start, end) {
+    if(end < this.bytes.end) return this.bytes.subarray(start, end);
       //find start
-      var a = this.arrayOfBytes;
-      var offset = 0;
-      for(var i = 0; i < a.length; i++) {
-        var bytes = a[i];
-        var bStart = offset + a[i].start;
-        var bEnd = offset + a[i].end;
+    var offset = 0;
+    var slice;
+    var a = arrayOfBytes;
+    for(var i = 0; i < a.length; i++) {
+      var cbytes = a[i];
 
-        //if(start < bStart && end < bEnd) return bytes.subarray(start, end);
+      if(!slice && (start-offset) < cbytes.length) { // must start within this block
+        if(end < cbytes.length) {
+          slice = cbytes.subarray(start-offset, end-offset);
+          break;
+        } else {
+          slice.set(cbytes); // prefill starting bytes
+          // start has been found, but end is not in the section
+        }
+      } else if(slice) {  // keep finding start
+        if(offset >= end) break; // all done
+        slice.set(cbytes, offset);
+        // multipart
+        //if(end - offse >= cbytes.length) 
+        
       }
-      return this.bytes.subarray(start, end);
+
+      offset += cbytes.length;
+    }
+    return slice;
   }
   
   return constructor;

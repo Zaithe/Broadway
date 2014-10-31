@@ -45,22 +45,24 @@ var ProgressiveStream = (function stream() {
     readAll: function(complete, bufferCallback) {
       this.onBuffer = bufferCallback;
       var xhr = new XMLHttpRequest();
+      xhr.overrideMimeType('text/plain; charset=x-user-defined');
       var async = true;
       xhr.open("GET", this.url, async);
       //xhr.responseType = "arraybuffer";
       var lastLength = 0;
       xhr.onprogress = function (event) {
           var res = xhr.response;
-          var len = res.length;
-          if (len >= 100000) { // buffer meta box infomation
-            var lendiff = len - lastLength;
-            ///console.log("ProgressiveStream::building part");
-            var buffer = new Uint8Array(lendiff);
-            for(var i=0; i < lendiff; i++) {
+          var absLen = res.length;
+          if(absLen === lastLength) return;
+          if (absLen >= 17360057) { //8 buffer meta box infomation
+            //console.log("absLen " + absLen);
+            var relLength = absLen - lastLength;
+            var buffer = new Uint8Array(relLength);
+            for(var i=0; i < relLength; i++) {
                var c = res.charCodeAt(lastLength+i);
-               buffer[i + lastLength] = c; // & 0xff
+               buffer[i] = c; // & 0xff
             }
-            lastLength = len;
+            lastLength = absLen;
             this.onBuffer(buffer.buffer);
           }
           
@@ -68,6 +70,8 @@ var ProgressiveStream = (function stream() {
 
       xhr.onreadystatechange = function (event) {
         if (xhr.readyState === 4) {
+          console.log("xhr.response " + xhr.response.length);
+          xhr.onprogress(event); // TODO remove?
           if(complete) complete(xhr.response);
           // var byteArray = new Uint8Array(xhr.response);
           // var array = Array.prototype.slice.apply(byteArray);
