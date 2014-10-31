@@ -1,23 +1,5 @@
 'use strict';
 
-var ProgressiveBytestream = (function BufferClosure(){
-  function constructor(arrayBuffer, start, length) {
-    //this.buffers = [];
-    this.bytes = [];
-  }
-  constructor.prototype = {
-    addBytes: function(byteObject){ // :Uint8Array
-      this.bytes.push(byteObject);
-    },
-    peek32: function (advance) {
-    },
-    getByte(x) {
-
-    }
-  }
-  return constructor;
-})();
-
 var Bytestream = (function BytestreamClosure() {
   function constructor(arrayBuffer, start, length) {
     this.bytes = new Uint8Array(arrayBuffer);
@@ -188,11 +170,39 @@ var Bytestream = (function BytestreamClosure() {
     },
     subStream: function (start, length) {
       return new Bytestream(this.bytes.buffer, start, length);
+    },
+    subarray: function (start, end) {
+      return bytes.subarray(offset + 4, offset + length + 4);
     }
   };
   return constructor;
 })();
 
+var ProgressiveBytestream = (function ProgressiveBytestream(){
+  function constructor(firstArrayBuffer) { // , fileStream
+    Bytestream.call(this, firstArrayBuffer);
+    this.arrayOfBytes = [firstArrayBuffer];
+  }
+  constructor.prototype = Object.create(Bytestream.prototype);
+  constructor.prototype.onBuffer = function(buffer) {
+       this.arrayOfBytes.push(buffer);
+  };
+  constructor.prototype.subarray = function (start, end) {
+      //find start
+      var a = this.arrayOfBytes;
+      var offset = 0;
+      for(var i = 0; i < a.length; i++) {
+        var bytes = a[i];
+        var bStart = offset + a[i].start;
+        var bEnd = offset + a[i].end;
+
+        //if(start < bStart && end < bEnd) return bytes.subarray(start, end);
+      }
+      return this.bytes.subarray(start, end);
+  }
+  
+  return constructor;
+})();
 
 var PARANOID = true; // Heavy-weight assertions.
 
@@ -711,16 +721,15 @@ var Track = (function track () {
      * This function returns an array of NAL units without their length prefixes.
      */
     getSampleNALUnits: function (sample, callback) {
+      // this.file = MP4Reader
       var stream = this.file.stream;
-      var bytes = stream.bytes;
       var offset = this.sampleToOffset(sample);
       var end = offset + this.sampleToSize(sample, 1);
 
       stream.bufferFor(end, function() {
         while(end - offset > 0) {
-          //var length = (new Bytestream(bytes.buffer, offset, end)).readU32();
           var length = stream.readU32AtIndex(offset); // improved GC usage
-          var nal = bytes.subarray(offset + 4, offset + length + 4);
+          var nal = stream.subarray(offset + 4, offset + length + 4);
           callback(nal);
           offset = offset + length + 4;
         }
@@ -865,14 +874,26 @@ var MP4Player = (function reader() {
   constructor.prototype = {
     readAll: function(callback) {
       console.info("MP4Player::readAll()");
-      this.stream.readAll(null, function (buffer) {
-        this.reader = new MP4Reader(new Bytestream(buffer));
+      // ================= WORK IN PROGRESS===============================
+      if(this.streaming) {
+        this.reader = new MP4Reader(new ProgressiveBytestream(buffer)); //Bytestream
+        this.reader.read();
+        var video = this.reader.tracks[1];
+        this.size = new Size(video.trak.tkhd.width, video.trak.tkhd.height);
+        console.info("MP4Player::readAll(), length: " +  this.reader.stream.length);
+        if (callback) callback();
+        return;
+      } 
+
+      this.stream.readAll(null, function (buffer) { // needs to be abstracted out -JD
+        this.reader = new MP4Reader(new ProgressiveBytestream(buffer)); //Bytestream
         this.reader.read();
         var video = this.reader.tracks[1];
         this.size = new Size(video.trak.tkhd.width, video.trak.tkhd.height);
         console.info("MP4Player::readAll(), length: " +  this.reader.stream.length);
         if (callback) callback();
       }.bind(this));
+
     },
     play: function() {
       var reader = this.reader;
@@ -953,8 +974,8 @@ var Broadway = (function broadway() {
     var useWorkers = div.attributes.workers ? div.attributes.workers.value == "true" : false;
     var render = div.attributes.render ? div.attributes.render.value == "true" : false;
     var streaming = div.attributes.stream ? div.attributes.stream.value == "true" : false;
-
-    this.player = new MP4Player(new Stream(src), this.canvas, useWorkers, render, streaming);
+    var streamer = streaming?new ProgressiveStream(src):new Stream(src);
+    this.player = new MP4Player(streamer, this.canvas, useWorkers, render, streaming);
 
     this.score = null;
     this.player.onStatisticsUpdated = function (statistics) {
