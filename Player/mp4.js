@@ -179,15 +179,17 @@ var Bytestream = (function BytestreamClosure() {
 })();
 
 var ProgressiveBytestream = (function ProgressiveBytestream(){
+  var arrayOfBytes = [];
   function constructor(firstArrayBuffer) { // , fileStream
     Bytestream.call(this, firstArrayBuffer);
-    this.arrayOfBytes = [firstArrayBuffer];
+    arrayOfBytes.push(firstArrayBuffer);
     console.log("=======ProgressiveBytestream ctor called=========");
   }
   constructor.prototype = Object.create(Bytestream.prototype);
   constructor.constructor = constructor;
+
   constructor.prototype.onBuffer = function(buffer) {
-       this.arrayOfBytes.push(buffer);
+       arrayOfBytes.push(buffer);
   };
   constructor.prototype.subarray = function (start, end) {
       //find start
