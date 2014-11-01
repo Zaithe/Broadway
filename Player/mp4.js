@@ -840,13 +840,14 @@ var MP4Player = (function reader() {
     getBoundaryStrengthsA: "optimized"
   };
 
-  function constructor(stream, canvas, useWorkers, render, streaming) {
+  function constructor(stream, canvas, useWorkers, render, fps, streaming) {
     this.canvas = canvas;
     this.webGLCanvas = null;
     this.stream = stream;
     this.useWorkers = useWorkers;
     this.render = render;
     this.streaming = streaming;
+    this.fps = fps;
 
     this.statistics = {
       videoStartTime: 0,
@@ -1000,16 +1001,13 @@ var MP4Player = (function reader() {
           var avc = this.avc;
           video.getSampleNALUnits(pic, function (nal) {
             if(nal!=null) avc.decode(nal); 
-            else {pic ++;setTimeout(foo.bind(this), 1); }
+            else {
+              pic ++;
+              setTimeout(foo.bind(this), 1000 / this.fps); 
+            }
           }.bind(this));
         }
-        /*
-        pic ++;
-        if (pic < 3000) { 
-          setTimeout(foo.bind(this), 1);
-        } */
-        //setTimeout(foo.bind(this), 1);
-      }.bind(this), 1);
+      }.bind(this), 1000 / this.fps);
     }
   };
 
@@ -1041,7 +1039,8 @@ var Broadway = (function broadway() {
     var render = div.attributes.render ? div.attributes.render.value == "true" : false;
     var streaming = div.attributes.stream ? div.attributes.stream.value == "true" : false;
     var streamer = streaming?new ProgressiveStream(src):new Stream(src);
-    this.player = new MP4Player(streamer, this.canvas, useWorkers, render, streaming);
+    var fps = div.attributes.fps ? div.attributes.fps.value : 150; // default to 150fps, for benching
+    this.player = new MP4Player(streamer, this.canvas, useWorkers, render, fps, streaming);
 
     this.score = null;
     this.player.onStatisticsUpdated = function (statistics) {
