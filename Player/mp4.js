@@ -195,9 +195,11 @@ var ProgressiveBytestream = (function ProgressiveBytestream(){
 
   constructor.prototype.bufferFor = function(size, callback) { // interface
       //assert(size > 0, "size error");
+      //console.log("bufferFor");
       if(size <= this.bytes.length) { cb = null; callback(); }
       else {
         console.log("fetching buffer for "+size + " curr: " + this.bytes.length);
+        if(cb) assert("callback for bytes already in use");
         cb = callback;
         cbSize = size;
       };
@@ -791,7 +793,7 @@ var Track = (function track () {
           callback(nal);
           offset = offset + length + 4;
         }
-        callback(0);
+        callback(null);
       }.bind(this));
     }
 
@@ -982,20 +984,23 @@ var MP4Player = (function reader() {
 
       /* Decode Pictures */
       var pic = 0;
+      var fps = audio.trak.mdia.mdhd.timeScale;
+      console.log("fps " + fps); // should be 24
+
       setTimeout(function foo() {
         if (this.useWorkers) {
           var avcWorker = this.avcWorker;
           video.getSampleNALUnits(pic, function (nal) {
                 // Copy the sample so that we only do a structured clone of the
                 // region of interest
-                if(nal!=0) avcWorker.sendMessage("decode-sample", Uint8Array(nal)); 
-                else {setTimeout(foo.bind(this), 1); }
+                if(nal!=null) avcWorker.sendMessage("decode-sample", Uint8Array(nal)); 
+                else {pic ++;setTimeout(foo.bind(this), 1); }
               });
         } else {
           var avc = this.avc;
           video.getSampleNALUnits(pic, function (nal) {
-            if(nal!=0) avc.decode(nal); 
-            else {setTimeout(foo.bind(this), 1); }
+            if(nal!=null) avc.decode(nal); 
+            else {pic ++;setTimeout(foo.bind(this), 1); }
           }.bind(this));
         }
         /*
@@ -1003,6 +1008,7 @@ var MP4Player = (function reader() {
         if (pic < 3000) { 
           setTimeout(foo.bind(this), 1);
         } */
+        //setTimeout(foo.bind(this), 1);
       }.bind(this), 1);
     }
   };
