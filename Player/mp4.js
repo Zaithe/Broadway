@@ -10,7 +10,11 @@ var Bytestream = (function BytestreamClosure() {
     this.end = (start + length) || this.bytes.length;
   }
   constructor.prototype = {
-    bufferFor(size, callback) { // interface
+    changeBuffer: function(arrayBuffer) {
+      this.bytes = new Uint8Array(arrayBuffer);
+      this.end = this.bytes.length;
+    },
+    bufferFor: function(size, callback) { // interface
       callback(); 
     },
     get length() {
@@ -180,18 +184,44 @@ var Bytestream = (function BytestreamClosure() {
 
 var ProgressiveBytestream = (function ProgressiveBytestream(){
   var arrayOfBytes = [];
+  var cb, cbSize=0;
   function constructor(firstArrayBuffer) { // , fileStream
     Bytestream.call(this, firstArrayBuffer);
-    arrayOfBytes.push(new Uint8Array(firstArrayBuffer));
+    //arrayOfBytes.push(new Uint8Array(firstArrayBuffer));
     console.log("=======ProgressiveBytestream ctor called=========");
   }
   constructor.prototype = Object.create(Bytestream.prototype);
   constructor.constructor = constructor;
 
-  constructor.prototype.onBuffer = function(buffer) {
-       arrayOfBytes.push(new Uint8Array(buffer));
+  constructor.prototype.bufferFor = function(size, callback) { // interface
+      //assert(size > 0, "size error");
+      if(size <= this.bytes.length) { cb = null; callback(); }
+      else {
+        console.log("fetching buffer for "+size + " curr: " + this.bytes.length);
+        cb = callback;
+        cbSize = size;
+      };
   };
-  constructor.prototype.subarray = function (start, end) {
+  constructor.prototype.onBuffer = function(buffer) {
+    //if(!this.bytes) { this.bytes = buffer; return; }
+      var b  = new Uint8Array(buffer);
+      var newbuff = new Uint8Array(b.length+this.bytes.length);
+      newbuff.set(this.bytes, 0);
+      newbuff.set(b, this.bytes.length);
+      this.changeBuffer(newbuff);
+      //this.bytes = newbuff;
+      if(cb && cbSize <= this.bytes.length) this.bufferFor(cbSize, cb);
+      //console.log("new len " + this.bytes.length);
+       //arrayOfBytes.push(new Uint8Array(buffer));
+  };
+  constructor.prototype.skip = function (length) { //TODO: not ideal fix
+    if(this.end < this.pos + length) {
+      this.pos = this.end;
+      console.log("skipping to " + length);
+    }
+    else this.seek(this.pos + length);
+  };
+  constructor.prototype._subarray = function (start, end) {
     if(end <= this.bytes.length) return this.bytes.subarray(start, end);
     //find start
     var offset = 0;
@@ -204,11 +234,11 @@ var ProgressiveBytestream = (function ProgressiveBytestream(){
       if(!slice && from <= cbytes.length) { // must start within this block
         if(to <= cbytes.length) {
           slice = cbytes.subarray(from, to);
+          //console.log("another whole part " + from + " " + to + " " + i);
           break;
         } else {
-          
           slice = new Uint8Array(end-start);
-          console.log("creating slice "+ slice.length + " " + cbytes.length + " " + from+":"+to);
+          //console.log("creating slice "+ slice.length + " " + cbytes.length + " " + from+":"+to);
           slice.set(cbytes.subarray(from, cbytes.length), 0); // prefill starting bytes
           // start has been found, but end is not in the section
         }
@@ -301,7 +331,7 @@ var MP4Reader = (function reader() {
       }
 
       function skipRemainingBytes () {
-        if(box.size > 100000) return;
+        //if(box.size > 100000) return; // didn't work
         // Never skips to end of file if meta is all on top. JD
         //console.log("skipRemainingBytes " + stream.pos + " " + stream.end + " r:"+remainingBytes()); // if moov at start, this is just start of file JD
         stream.skip(remainingBytes());
@@ -754,7 +784,6 @@ var Track = (function track () {
       var stream = this.file.stream;
       var offset = this.sampleToOffset(sample);
       var end = offset + this.sampleToSize(sample, 1);
-
       stream.bufferFor(end, function() {
         while(end - offset > 0) {
           var length = stream.readU32AtIndex(offset); // improved GC usage
@@ -762,7 +791,8 @@ var Track = (function track () {
           callback(nal);
           offset = offset + length + 4;
         }
-      });
+        callback(0);
+      }.bind(this));
     }
 
   };
@@ -908,7 +938,7 @@ var MP4Player = (function reader() {
         var bytes;
         if(this.streaming) {
           bytes = new ProgressiveBytestream(buffer);
-          this.stream.changeBufferCallback(bytes.onBuffer);
+          this.stream.changeBufferCallback(bytes.onBuffer.bind(bytes));
         } else {
           bytes = new Bytestream(buffer);
         }
@@ -958,18 +988,21 @@ var MP4Player = (function reader() {
           video.getSampleNALUnits(pic, function (nal) {
                 // Copy the sample so that we only do a structured clone of the
                 // region of interest
-                avcWorker.sendMessage("decode-sample", Uint8Array(nal));
+                if(nal!=0) avcWorker.sendMessage("decode-sample", Uint8Array(nal)); 
+                else {setTimeout(foo.bind(this), 1); }
               });
         } else {
           var avc = this.avc;
           video.getSampleNALUnits(pic, function (nal) {
-            avc.decode(nal);
-          });
+            if(nal!=0) avc.decode(nal); 
+            else {setTimeout(foo.bind(this), 1); }
+          }.bind(this));
         }
+        /*
         pic ++;
         if (pic < 3000) { 
           setTimeout(foo.bind(this), 1);
-        } 
+        } */
       }.bind(this), 1);
     }
   };
