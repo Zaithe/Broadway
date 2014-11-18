@@ -696,7 +696,7 @@ var Track = (function track () {
     /**
      * Computes the sample at the specified time.
      */
-    __timeToSample: function (time) {
+    timeToSample: function (time) {
       /* In the time-to-sample table samples are grouped by their duration. The count field
        * indicates the number of consecutive samples that have the same duration. For example,
        * the following table:
@@ -731,7 +731,7 @@ var Track = (function track () {
     /**
      * Gets the total time of the track.
      */
-    __getTotalTime: function () {
+    getTotalTime: function () {
       if (PARANOID) {
         var table = this.trak.mdia.minf.stbl.stts.table;
         var duration = 0;
@@ -742,7 +742,7 @@ var Track = (function track () {
       }
       return this.trak.mdia.mdhd.duration;
     },
-    __getTotalTimeInSeconds: function () {
+    getTotalTimeInSeconds: function () {
       return this.timeToSeconds(this.getTotalTime());
     },
     getTimeScale: function () {

@@ -54,13 +54,13 @@ var ProgressiveStream = (function stream() {
           var res = xhr.response;
           var absLen = res.length;
           if(absLen === lastLength) return;
+          // prebuffer header tags
           if (absLen >= 80000) { //8 17360057 buffer meta box infomation
-            //console.log("absLen " + absLen);
             var relLength = absLen - lastLength;
             var buffer = new Uint8Array(relLength);
             for(var i=0; i < relLength; i++) {
                var c = res.charCodeAt(lastLength+i);
-               buffer[i] = c & 0xff; // & 0xff
+               buffer[i] = c & 0xff; // Build buffer from string stream
             }
             lastLength = absLen;
             this.onBuffer(buffer.buffer);
