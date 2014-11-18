@@ -5,7 +5,7 @@
 <body onload="load()">
   <script src="sylvester.js" type="text/javascript"></script>
   <script src="glUtils.js" type="text/javascript"></script>
-
+  
   <script type="text/javascript" src="util.js"></script>
   <script type="text/javascript" src="stream.js"></script>
   <script type="text/javascript" src="worker.js"></script>
@@ -13,7 +13,7 @@
   <script type="text/javascript" src="avc.js"></script>
   <script type="text/javascript" src="mp4.js"></script>
   <script src='canvas.js' type='text/javascript'></script>
-
+  
   <script type="text/javascript">
     function load() {
       var nodes = document.querySelectorAll('div.broadway');
@@ -23,16 +23,13 @@
       }
     }
   </script>
-
+  
   <!-- <canvas id='canvas' width="640" height="100" style="background-color: #333333;"></canvas> -->
   <br>
   <br>
   <a style="font-size: 24px; padding: 20px">Broadway.js - H.264 Decoding in JavaScript w/ asm.js</a>
   <br>
   <a style="font-size: 14px; padding: 20px">Click to Download and Play (The entire file is downloaded before playback begins. Once the file is cached, playback begins much faster.)</a><br><br>
-  <div style="float: left; position: relative;" >
-    <br/>Streaming:<br/>
-    <div class="broadway" src="tree2.mp4" width="560" height="304" workers="false" render="true" stream="true"></div>
-  </div>
-  </body>
+  <div class="broadway" src="tree.mp4" width="560" height="304" style="float: left; position: relative;" workers="false" render="true"></div>
+</body>
 </html>
