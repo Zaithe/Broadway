@@ -995,7 +995,10 @@ var MP4Player = (function reader() {
                 // Copy the sample so that we only do a structured clone of the
                 // region of interest
                 if(nal!=null) avcWorker.sendMessage("decode-sample", Uint8Array(nal)); 
-                else {pic ++;setTimeout(foo.bind(this), 1); }
+                else {
+                  pic ++;
+                  setTimeout(foo.bind(this), 1000 / this.fps); 
+                }
               });
         } else {
           var avc = this.avc;
@@ -1039,7 +1042,7 @@ var Broadway = (function broadway() {
     var render = div.attributes.render ? div.attributes.render.value == "true" : false;
     var streaming = div.attributes.stream ? div.attributes.stream.value == "true" : false;
     var streamer = streaming?new ProgressiveStream(src):new Stream(src);
-    var fps = div.attributes.fps ? div.attributes.fps.value : 150; // default to 150fps, for benching
+    var fps = div.attributes.fps ? div.attributes.fps.value : 1000; // default to 1000fps, for benching (1/1 timeout)
     this.player = new MP4Player(streamer, this.canvas, useWorkers, render, fps, streaming);
 
     this.score = null;
