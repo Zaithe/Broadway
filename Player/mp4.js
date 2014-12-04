@@ -1026,6 +1026,7 @@ var Broadway = (function broadway() {
     this.canvas.width = width;
     this.canvas.height = height;
     this.canvas.style.backgroundColor = "#333333";
+
     this.canvas.onclick = function () {
       this.play();
     }.bind(this);
@@ -1066,7 +1067,14 @@ var Broadway = (function broadway() {
       // info += " score: " + this.score;
 
       this.info.innerHTML = info;
+
     }.bind(this);
+
+    var autoplay = div.attributes.autoplay ? div.attributes.autoplay.value.toLowerCase() == "true" : false;
+    if(autoplay) {
+       console.log("autoplaying");
+       this.player.play();
+    }
   }
   constructor.prototype = {
     play: function () {
