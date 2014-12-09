@@ -1,5 +1,14 @@
 'use strict';
 
+window.requestAnimFrame = (function(){
+  return  window.requestAnimationFrame       ||
+          window.webkitRequestAnimationFrame ||
+          window.mozRequestAnimationFrame    ||
+          function( callback ){
+            window.setTimeout(callback, 1000 / 60);
+          };
+})();
+
 var Bytestream = (function BytestreamClosure() {
   function constructor(arrayBuffer, start, length) {
     this.bytes = new Uint8Array(arrayBuffer);
@@ -968,6 +977,7 @@ var MP4Player = (function reader() {
       }
 
       var video = reader.tracks[1];
+      this.video = video;
       var audio = reader.tracks[2];
 
       var avc = reader.tracks[1].trak.mdia.minf.stbl.stsd.avc1.avcC;
@@ -985,32 +995,40 @@ var MP4Player = (function reader() {
 
       /* Decode Pictures */
       var pic = 0;
-      var fps = audio.trak.mdia.mdhd.timeScale;
-      console.log("fps " + fps); // should be 24
-
-      setTimeout(function foo() {
-        if (this.useWorkers) {
-          var avcWorker = this.avcWorker;
-          video.getSampleNALUnits(pic, function (nal) {
+      this.pic = 0;
+      //var fps = audio.trak.mdia.mdhd.timeScale;
+      //this.fps = fps;
+      console.log("fps " + this.fps); // should be 24
+      setTimeout(function foo(_this) {
+        if (_this.useWorkers) {
+          var avcWorker = _this.avcWorker;
+          _this.video.getSampleNALUnits(pic, function (nal) {
                 // Copy the sample so that we only do a structured clone of the
                 // region of interest
-                if(nal!=null) avcWorker.sendMessage("decode-sample", Uint8Array(nal)); 
+                if(nal!=null) _this.avcWorker.sendMessage("decode-sample", new Uint8Array(nal)); 
                 else {
-                  pic ++;
-                  setTimeout(foo.bind(this), 1000 / this.fps); 
+                  _this.pic ++;
+                  setTimeout(foo, 1000 / _this.fps, _this); 
                 }
-              });
+              }.bind(this));
         } else {
-          var avc = this.avc;
-          video.getSampleNALUnits(pic, function (nal) {
-            if(nal!=null) avc.decode(nal); 
-            else {
-              pic ++;
-              setTimeout(foo.bind(this), 1000 / this.fps); 
+          var avc = _this.avc;
+          _this.video.getSampleNALUnits(_this.pic, function (nal) {
+            if(nal!=null) {
+              avc.decode(nal);
+              
+            } else {
+              //TODO
+              ///requestAnimationFrame(
+                   /// function() { 
+                      _this.pic ++;
+                      setTimeout(foo, 1000 / _this.fps, _this); 
+                  /// } 
+                  ///  ); 
             }
-          }.bind(this));
+          });
         }
-      }.bind(this), 1000 / this.fps);
+      }, 1000 / this.fps, this);
     }
   };
 

@@ -55,7 +55,7 @@ var ProgressiveStream = (function stream() {
           var absLen = res.length;
           if(absLen === lastLength) return;
           // prebuffer header tags
-          if (absLen >= 80000) { //8 17360057 buffer meta box infomation
+          if (absLen >= 500000) { //80000 17360057 buffer meta box infomation
             var relLength = absLen - lastLength;
             var buffer = new Uint8Array(relLength);
             for(var i=0; i < relLength; i++) {
